@@ -14,5 +14,5 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+    - name: arindamvm/ubuntu22
+      run: docker run --privileged -p 6080:6080 -p 2221:2222 -v $PWD/vmdata:/data arindamvm/ubuntu22
