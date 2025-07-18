@@ -1,0 +1,90 @@
+name: Persistent QEMU VM with Auto-Restart
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */5 * * *'  # Every 5 hours
+
+jobs:
+  persistent-vm:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y qemu-kvm cloud-image-utils genisoimage openssh-client wget curl gh tmate
+
+    - name: Download existing persistent disk from release
+      id: restore-disk
+      run: |
+        mkdir disk
+        cd disk
+        if curl -sSfL -o persistent.img "https://github.com/${{ github.repository }}/releases/download/vm-disk/persistent.img"; then
+          echo "Persistent disk restored."
+        else
+          echo "Creating new persistent disk."
+          qemu-img create -f qcow2 persistent.img 10G
+        fi
+        cd ..
+
+    - name: Download Ubuntu cloud image
+      run: |
+        wget -q https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img -O ubuntu.img
+
+    - name: Generate cloud-init seed image
+      run: |
+        mkdir -p seed
+        echo "instance-id: githubvm" > seed/meta-data
+
+        SSH_KEY=$(curl -s https://api.github.com/users/${{ github.repository_owner }}/keys | grep '"key":' | head -n1 | cut -d'"' -f4)
+        if [ -z "$SSH_KEY" ]; then
+          echo "No SSH key found for user. Aborting."
+          exit 1
+        fi
+
+        cat > seed/user-data <<EOF
+        #cloud-config
+        users:
+          - name: root
+            ssh-authorized-keys:
+              - $SSH_KEY
+            sudo: ALL=(ALL) NOPASSWD:ALL
+            shell: /bin/bash
+        ssh_pwauth: false
+        disable_root: false
+        EOF
+
+        cloud-localds seed.img seed/user-data seed/meta-data
+
+    - name: Launch VM
+      run: |
+        nohup qemu-system-x86_64 \
+          -enable-kvm \
+          -m 16000 -smp 4 \
+          -drive file=disk/persistent.img,format=qcow2 \
+          -drive file=ubuntu.img,format=qcow2 \
+          -drive file=seed.img,format=raw \
+          -net nic -net user,hostfwd=tcp::2222-:22 \
+          -nographic > vm.log 2>&1 &
+
+    - name: Wait for SSH port to be available
+      run: |
+        for i in {1..30}; do
+          nc -z localhost 2222 && echo "VM is up!" && exit 0
+          echo "Waiting for VM SSH on port 2222..."
+          sleep 5
+        done
+        echo "Timeout waiting for VM SSH."
+        exit 1
+
+    - name: tmate SSH Debug (optional)
+      uses: mxschmitt/action-tmate@v3
+
+    - name: Upload updated persistent disk to release
+      if: always()
+      run: |
+        gh release delete-asset vm-disk persistent.img -y || echo "No existing asset to delete"
+        gh release upload vm-disk disk/persistent.img --clobber --repo ${{ github.repository }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
