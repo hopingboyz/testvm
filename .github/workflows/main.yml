@@ -2,7 +2,7 @@ name: Continuous Persistent VPS
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *'  # Every 6 hours
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 350
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set hostname to unixnodes
@@ -56,16 +56,18 @@ jobs:
       - name: Print tmate session info
         run: |
           echo "=============================="
-          echo "🔑 tmate session info (SSH & Web):"
+          echo "🔑 tmate SSH & web session info (auto-generated keys):"
           tmate show-messages
+          echo "Use root/root as login if needed"
           echo "=============================="
 
       - name: Sleep to keep VPS alive
-        run: sleep 21600
+        run: sleep 21600  # 6 hours
 
       - name: Backup persistent data
         run: |
           sudo mkdir -p /opt/vps-backup
+          # Full filesystem persistence (excluding volatile dirs)
           sudo rsync -a --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/backup --exclude=/opt/vps-backup / /opt/vps-backup/
           sudo chown -R $USER:$USER /opt/vps-backup
           zip -r backup.zip /opt/vps-backup
