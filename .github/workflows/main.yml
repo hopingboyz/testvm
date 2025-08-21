@@ -8,14 +8,14 @@ on:
 jobs:
   vps-session:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 350  # Just under 6 hours
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set hostname to unixnodes
-        run: sudo hostnamectl set-hostname unixnodes
+      - name: Set hostname to biralo
+        run: sudo hostnamectl set-hostname biralo
 
       - name: Download VPS backup (if any)
         uses: actions/download-artifact@v4
@@ -27,46 +27,44 @@ jobs:
       - name: Install prerequisites
         run: |
           sudo apt update
-          sudo apt install -y tmate curl unzip sudo net-tools neofetch rsync
+          sudo apt install -y tmate curl unzip sudo net-tools neofetch
 
-      - name: Enable root login with password
-        run: |
-          echo "root:root" | sudo chpasswd
-          sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo systemctl restart ssh
 
-      - name: Restore persistent data
+      - name: Restore backup files
         run: |
           if [ -f ./backup/backup.zip ]; then
             unzip -o ./backup/backup.zip -d /
-            echo "✅ Persistence restored"
           else
-            echo "ℹ️ No backup found, starting fresh"
+            echo "No backup found, starting fresh"
           fi
 
-      - name: Start tmate session in detached mode
-        uses: mxschmitt/action-tmate@v3
-        with:
-          detached: true
-          limit-access-to-actor: true
-
-      - name: Print tmate session info
+      - name: Create user itz_ytansh with sudo
         run: |
-          echo "=============================="
-          echo "🔑 tmate SSH & web session info (auto-generated keys):"
-          tmate show-messages
-          echo "Use root/root as login if needed"
-          echo "=============================="
+          if ! id -u itz_ytansh >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash itz_ytansh
+            echo "root:root" | sudo chpasswd
+            sudo usermod -aG sudo itz_ytansh
+            echo "itz_ytansh ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/itz_ytansh
+          fi
+
+      - name: Start tmate session for SSH access
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Show Tailscale IP and tmate info
+        run: |
+          echo "🔗 Tailscale IP:"
+          tailscale ip -4 || echo "Tailscale IP not found"
+          echo ""
+          echo "🔑 tmate SSH session:"
+          cat $HOME/.tmate.sock/ssh
 
       - name: Sleep to keep VPS alive
         run: sleep 21600  # 6 hours
 
-      - name: Backup persistent data
+      - name: Backup VPS data and tailscale state
         run: |
-          sudo mkdir -p /opt/vps-backup
-          # Full filesystem persistence (excluding volatile dirs)
-          sudo rsync -a --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/backup --exclude=/opt/vps-backup / /opt/vps-backup/
+          sudo mkdir -p /opt/vps-backup/data
+          sudo cp /var/lib/tailscale/tailscaled.state /opt/vps-backup/data/
           sudo chown -R $USER:$USER /opt/vps-backup
           zip -r backup.zip /opt/vps-backup
 
