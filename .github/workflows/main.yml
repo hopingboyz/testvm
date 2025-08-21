@@ -27,9 +27,7 @@ jobs:
       - name: Install prerequisites
         run: |
           sudo apt update
-          sudo apt install -y tmate curl unzip sudo net-tools neofetch openssh-server rsync
-          sudo systemctl enable ssh
-          sudo systemctl start ssh
+          sudo apt install -y tmate curl unzip sudo net-tools neofetch rsync
 
       - name: Enable root login with password
         run: |
