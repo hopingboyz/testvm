@@ -2,7 +2,7 @@ name: Continuous Persistent VPS
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -47,28 +47,25 @@ jobs:
             echo "ℹ️ No backup found, starting fresh"
           fi
 
-      - name: Start tmate session (SSH & web)
+      - name: Start tmate session in detached mode
         uses: mxschmitt/action-tmate@v3
         with:
-          install: true
-          ssh-key: false       # Force generation of a temporary SSH key
+          detached: true
           limit-access-to-actor: true
 
-      - name: Show connection details
+      - name: Print tmate session info
         run: |
           echo "=============================="
-          echo "🔑 tmate SSH session (temporary key, auto-generated):"
-          echo "Check the Actions log above for SSH & Web URLs"
-          echo "Root login: root / root"
+          echo "🔑 tmate session info (SSH & Web):"
+          tmate show-messages
           echo "=============================="
 
       - name: Sleep to keep VPS alive
-        run: sleep 21600  # 6 hours
+        run: sleep 21600
 
       - name: Backup persistent data
         run: |
           sudo mkdir -p /opt/vps-backup
-          # Save full root filesystem except unnecessary dirs to reduce size
           sudo rsync -a --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/backup --exclude=/opt/vps-backup / /opt/vps-backup/
           sudo chown -R $USER:$USER /opt/vps-backup
           zip -r backup.zip /opt/vps-backup
