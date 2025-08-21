@@ -8,7 +8,7 @@ on:
 jobs:
   vps-session:
     runs-on: ubuntu-latest
-    timeout-minutes: 350  # Just under 6 hours
+    timeout-minutes: 350
 
     steps:
       - name: Checkout repo
@@ -47,17 +47,19 @@ jobs:
             echo "ℹ️ No backup found, starting fresh"
           fi
 
-      - name: Start tmate session for SSH access
+      - name: Start tmate session (SSH & web)
         uses: mxschmitt/action-tmate@v3
         with:
-          limit-access-to-actor: true  # Only repo owner can access
+          install: true
+          ssh-key: false       # Force generation of a temporary SSH key
+          limit-access-to-actor: true
 
-      - name: Show SSH connection info
+      - name: Show connection details
         run: |
           echo "=============================="
-          echo "🔑 SSH (via GitHub runner public IP):"
-          echo "ssh root@$(curl -s ifconfig.me)"
-          echo "Password: root"
+          echo "🔑 tmate SSH session (temporary key, auto-generated):"
+          echo "Check the Actions log above for SSH & Web URLs"
+          echo "Root login: root / root"
           echo "=============================="
 
       - name: Sleep to keep VPS alive
@@ -66,8 +68,8 @@ jobs:
       - name: Backup persistent data
         run: |
           sudo mkdir -p /opt/vps-backup
-          # Save /home and /etc (you can expand this list)
-          sudo rsync -a /home /etc /opt/vps-backup/
+          # Save full root filesystem except unnecessary dirs to reduce size
+          sudo rsync -a --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/backup --exclude=/opt/vps-backup / /opt/vps-backup/
           sudo chown -R $USER:$USER /opt/vps-backup
           zip -r backup.zip /opt/vps-backup
 
